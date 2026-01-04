@@ -7,6 +7,7 @@
 const start = require('./common');
 
 const assert = require('assert');
+const nodeUtil = require('util');
 const util = require('./util');
 
 const mongoose = start.mongoose;
@@ -3014,6 +3015,40 @@ describe('model: updateOne: ', function() {
     const fromDb = await Test.findOne({ _id: doc._id });
     assert.ok(fromDb.nested.updatedAt);
     assert.ok(fromDb.nested.updatedAt > doc.nested.updatedAt);
+  });
+
+  it('includes update previews when mixing array and object updates', function() {
+    const schema = Schema({ name: String });
+    const Model = db.model('UpdatePreview', schema);
+
+    const currentUpdate = { $set: { name: 'Alpha', meta: { nested: true } } };
+    const incomingUpdate = [{ $set: { name: 'Beta' } }];
+    const query = Model.updateOne({ name: 'Start' }, currentUpdate);
+
+    const previewUpdate = update => {
+      const preview = nodeUtil.inspect(update, {
+        depth: 2,
+        maxArrayLength: 5,
+        breakLength: 80,
+        compact: true
+      });
+
+      if (preview.length > 200) {
+        return `${preview.slice(0, 197)}...`;
+      }
+
+      return preview;
+    };
+
+    assert.throws(() => {
+      query.updateOne({ name: 'Start' }, incomingUpdate, { updatePipeline: true });
+    }, err => {
+      assert.strictEqual(
+        err.message,
+        `Cannot mix array and object updates (current: ${previewUpdate(currentUpdate)}, incoming: ${previewUpdate(incomingUpdate)})`
+      );
+      return true;
+    });
   });
 
   describe('mongodb 42 features', function() {
